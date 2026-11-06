@@ -20,5 +20,37 @@ class TestContact(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Contact(fn="").to_vcard()
 
+
+class TestStructuredValues(unittest.TestCase):
+    """An escaped separator inside a component must not split it."""
+
+    def test_escaped_separators_parse_into_one_component(self):
+        text = (
+            "BEGIN:VCARD\nVERSION:4.0\nFN:John Doe\n"
+            "N:Doe\\;Jr;John;;;\n"
+            "ADR;TYPE=home:;;1\\; Main St;Town;;;\n"
+            "CATEGORIES:R\\,D,Sales\n"
+            "END:VCARD\n"
+        )
+        c = Contact.from_vcard(text)
+        self.assertEqual(c.n, ["Doe;Jr", "John", "", "", ""])
+        self.assertEqual(c.adr[0]["value"], ["", "", "1; Main St", "Town", "", "", ""])
+        self.assertEqual(c.categories, ["R,D", "Sales"])
+
+    def test_structured_values_round_trip(self):
+        c = Contact(
+            fn="John Doe",
+            n=["Doe;Jr", "John", "", "", ""],
+            nickname=["J;D"],
+            adr=[{"value": ["", "", "1; Main St", "Town", "", "", ""], "type": ["home"]}],
+            categories=["R,D", "Sales"],
+        )
+        parsed = Contact.from_vcard(c.to_vcard())
+        self.assertEqual(parsed.n, c.n)
+        self.assertEqual(parsed.nickname, c.nickname)
+        self.assertEqual(parsed.adr[0]["value"], c.adr[0]["value"])
+        self.assertEqual(parsed.categories, c.categories)
+
+
 if __name__ == '__main__':
     unittest.main()
