@@ -27,12 +27,19 @@ def escape_text(text: str) -> str:
                 .replace('\n', '\\n'))
 
 
+_ESCAPES = {'n': '\n', 'N': '\n', ',': ',', ';': ';', '\\': '\\'}
+
+
 def unescape_text(text: str) -> str:
-    """Unescape text from vCard value encoding."""
-    return (text.replace('\\n', '\n')
-                .replace('\\,', ',')
-                .replace('\\;', ';')
-                .replace('\\\\', '\\'))
+    """Unescape text from vCard value encoding.
+
+    A single left-to-right pass, so an escaped backslash is consumed before
+    the character after it is looked at: ``\\\\n`` is a backslash followed by
+    ``n``, not a backslash followed by a newline. Chained ``str.replace``
+    calls get that wrong. ``\\N`` is accepted as well as ``\\n`` (RFC 6350,
+    section 3.4).
+    """
+    return re.sub(r'\\([nN,;\\])', lambda m: _ESCAPES[m.group(1)], text)
 
 
 def fold_line(line: str, limit: int = 75) -> List[str]:
