@@ -35,6 +35,28 @@ def unescape_text(text: str) -> str:
                 .replace('\\\\', '\\'))
 
 
+def split_escaped(value: str, sep: str) -> List[str]:
+    """Split a structured value on unescaped ``sep``, then unescape each part.
+
+    Splitting has to come first: once a value is unescaped, an escaped
+    separator inside a component (``Doe\\;Jr``) is indistinguishable from a
+    real component boundary.
+    """
+    parts: List[str] = []
+    current: List[str] = []
+    chars = iter(value)
+    for ch in chars:
+        if ch == '\\':
+            current.append(ch + next(chars, ''))  # keep escape pairs whole
+        elif ch == sep:
+            parts.append(unescape_text(''.join(current)))
+            current = []
+        else:
+            current.append(ch)
+    parts.append(unescape_text(''.join(current)))
+    return parts
+
+
 def fold_line(line: str, limit: int = 75) -> List[str]:
     """Fold a single line according to RFC 6350 at limit chars."""
     parts = []
@@ -202,14 +224,14 @@ class Contact:
                 if '=' in p:
                     k, v = p.split('=', 1)
                     params[k.lower()] = v.split(',')
-            params_map.setdefault(name, []).append({'params': params, 'value': unescape_text(value)})
+            params_map.setdefault(name, []).append({'params': params, 'value': unescape_text(value), 'raw': value})
         # Required FN
         if 'FN' not in params_map:
             raise ValidationError('FN is required')
         contact = Contact(fn=params_map['FN'][0]['value'])
         # N
         if 'N' in params_map:
-            contact.n = params_map['N'][0]['value'].split(';')
+            contact.n = split_escaped(params_map['N'][0]['raw'], ';')
         # Populate fields
         for name, entries in params_map.items():
             for entry in entries:
@@ -218,7 +240,7 @@ class Contact:
                 elif name == 'TEL':
                     contact.tel.append({'value': entry['value'], 'type': entry['params'].get('type', [])})
                 elif name == 'ADR':
-                    contact.adr.append({'value': entry['value'].split(';'), 'type': entry['params'].get('type', [])})
+                    contact.adr.append({'value': split_escaped(entry['raw'], ';'), 'type': entry['params'].get('type', [])})
                 elif name == 'PHOTO' and 'ENCODING' in entry['params']:
                     contact.photo_data = entry['value']
                 elif name == 'BDAY':
@@ -230,7 +252,7 @@ class Contact:
                 elif name == 'IMPP':
                     contact.impp.append(entry['value'])
                 elif name == 'NICKNAME':
-                    contact.nickname = entry['value'].split(';')
+                    contact.nickname = split_escaped(entry['raw'], ';')
                 elif name == 'UID':
                     contact.uid = entry['value']
                 elif name == 'PRODID':
@@ -245,7 +267,7 @@ class Contact:
                 elif name == 'GENDER':
                     contact.gender = entry['value']
                 elif name == 'CATEGORIES':
-                    contact.categories = entry['value'].split(',')
+                    contact.categories = split_escaped(entry['raw'], ',')
                 elif name == 'NOTE':
                     contact.note = entry['value']
                 elif name not in ('BEGIN', 'END', 'VERSION'):
